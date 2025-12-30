@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Scholar's Fire</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Georgia', serif; background: #000; color: #fff; }
+        
+        /* SPLASH SCREEN STYLES */
+        #splash-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: #1a0b00; z-index: 100;
+        }
+        .fade-in { animation: fadeIn 2s ease-in-out forwards; opacity: 0; }
+        .hidden { display: none !important; }
+        
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        
+        /* GAME UI */
+        #game-ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #2c3e50; /* Placeholder for HD Background */
+            display: none;
+        }
+        
+        /* Top Bar */
+        .top-bar {
+            position: absolute; top: 0; width: 100%; height: 60px;
+            background: rgba(0,0,0,0.6); display: flex; justify-content: space-between; align-items: center;
+            padding: 0 20px; box-sizing: border-box;
+        }
+
+        /* Badge Area (Top Left) */
+        #badge-area { display: flex; gap: 10px; }
+        .badge { width: 40px; height: 40px; background: gold; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #000; box-shadow: 0 0 10px gold; }
+
+        /* Timer (Center) */
+        #timer { font-size: 24px; font-weight: bold; color: #fff; }
+
+        /* Fire Bar (Top Right) */
+        #fire-container { width: 200px; height: 20px; background: #333; border: 2px solid #555; position: relative; }
+        #fire-bar { width: 50%; height: 100%; background: linear-gradient(90deg, #ff4e00, #ffcc00); transition: width 0.3s; }
+        .fire-label { position: absolute; top: -20px; right: 0; font-size: 12px; }
+
+        /* Game Scene Items (Placeholders for clickable areas) */
+        #scene-area { position: relative; width: 100%; height: 100%; margin-top: 60px; }
+        .game-item {
+            position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border: 1px dashed white;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; text-align: center;
+            transition: transform 0.2s;
+        }
+        .game-item:active { transform: scale(0.95); }
+        .found { background: rgba(0, 255, 0, 0.3); border: 2px solid lime; pointer-events: none; }
+
+        /* Messages */
+        #message-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); padding: 20px; border: 2px solid gold; text-align: center; display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="splash-screen">
+        <h1 id="splash-text-1" class="fade-in">KINGDOM SEEKER</h1>
+        <h2 id="splash-text-2" class="fade-in" style="animation-delay: 2.5s; display:none;">Opening the Word...</h2>
+        <h1 id="splash-text-3" class="fade-in" style="font-size: 3em; color: gold; animation-delay: 4.5s; display:none;">The Scholar's Fire</h1>
+    </div>
+
+    <div id="game-ui">
+        <div class="top-bar">
+            <div id="badge-area">
+                </div>
+            <div id="timer">00:30</div>
+            <div>
+                <div class="fire-label">SCHOLAR'S FIRE</div>
+                <div id="fire-container">
+                    <div id="fire-bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="scene-area">
+            </div>
+
+        <div id="message-overlay">
+            <h2 id="msg-title">Level Complete!</h2>
+            <button onclick="restartLevel()">Play Again</button>
+        </div>
+    </div>
+
+<script>
+    // --- GAME CONFIG ---
+    const LEVEL_TIME = 30;
+    const MAX_FIRE = 100;
+    let gameState = {
+        level: 1,
+        timeRemaining: LEVEL_TIME,
+        fire: 50, // Starts at half
+        currentStep: 0, // Index of item to find
+        isPlaying: false,
+        mistakes: 0
+    };
+
+    // The Sequence for Gen 1 (Simplified for demo)
+    const levelData = [
+        { id: 'light', name: 'Light (Day 1)', x: '10%', y: '20%' },
+        { id: 'sky', name: 'Sky (Day 2)', x: '30%', y: '50%' },
+        { id: 'plants', name: 'Plants (Day 3)', x: '60%', y: '30%' },
+        { id: 'sun', name: 'Sun/Moon (Day 4)', x: '80%', y: '10%' },
+        { id: 'fish', name: 'Fish/Birds (Day 5)', x: '20%', y: '70%' },
+        { id: 'beasts', name: 'Beasts/Man (Day 6)', x: '50%', y: '60%' }
+    ];
+
+    let timerInterval;
+
+    // --- SPLASH SCREEN SEQUENCE ---
+    window.onload = function() {
+        const t1 = document.getElementById('splash-text-1');
+        const t2 = document.getElementById('splash-text-2');
+        const t3 = document.getElementById('splash-text-3');
+        const splash = document.getElementById('splash-screen');
+        const game = document.getElementById('game-ui');
+
+        // Simple animation sequencer
+        setTimeout(() => { t1.style.display = 'none'; t2.style.display = 'block'; }, 2500);
+        setTimeout(() => { t2.style.display = 'none'; t3.style.display = 'block'; }, 4500);
+        setTimeout(() => { 
+            splash.classList.add('hidden'); 
+            game.style.display = 'block';
+            startLevel();
+        }, 7000);
+    };
+
+    // --- GAME LOGIC ---
+
+    function startLevel() {
+        // Reset State
+        gameState.timeRemaining = LEVEL_TIME;
+        gameState.fire = 50;
+        gameState.currentStep = 0;
+        gameState.mistakes = 0;
+        gameState.isPlaying = true;
+        
+        document.getElementById('message-overlay').style.display = 'none';
+        updateUI();
+        renderScene();
+        
+        // Start Timer
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if(!gameState.isPlaying) return;
+            gameState.timeRemaining--;
+            updateUI();
+            
+            if (gameState.timeRemaining <= 0) {
+                endGame(false, "Time's Up!");
+            }
+        }, 1000);
+    }
+
+    function renderScene() {
+        const scene = document.getElementById('scene-area');
+        scene.innerHTML = ''; // Clear old items
+
+        // We shuffle the items visually, but keep logic checks based on order
+        // In a real game, these X/Y coords are fixed on the artwork
+        levelData.forEach((item, index) => {
+            const el = document.createElement('div');
+            el.className = 'game-item';
+            el.style.left = item.x;
+            el.style.top = item.y;
+            el.innerText = item.name; // Debug text
+            el.dataset.index = index; // Store which order this is
+            
+            el.onclick = () => handlePick(index, el);
+            scene.appendChild(el);
+        });
+    }
+
+    function handlePick(pickedIndex, element) {
+        if (!gameState.isPlaying) return;
+
+        // Check if this is the correct NEXT item in sequence
+        if (pickedIndex === gameState.currentStep) {
+            // CORRECT
+            gameState.fire = Math.min(gameState.fire + 15, MAX_FIRE);
+            gameState.currentStep++;
+            element.classList.add('found'); // Visual feedback
+            
+            // Check Win
+            if (gameState.currentStep >= levelData.length) {
+                endGame(true, "Level Complete!");
+            }
+        } else {
+            // WRONG
+            gameState.fire = Math.max(gameState.fire - 20, 0);
+            gameState.mistakes++;
+            
+            // Shake effect or visual red flash could go here
+            element.style.background = 'red';
+            setTimeout(() => element.style.background = 'rgba(255,255,255,0.1)', 200);
+
+            if (gameState.fire <= 0) {
+                endGame(false, "Your Fire has gone out!");
+            }
+        }
+        updateUI();
+    }
+
+    function updateUI() {
+        document.getElementById('timer').innerText = `00:${gameState.timeRemaining < 10 ? '0' : ''}${gameState.timeRemaining}`;
+        document.getElementById('fire-bar').style.width = gameState.fire + '%';
+        
+        // Change color based on fire level
+        const bar = document.getElementById('fire-bar');
+        if(gameState.fire < 30) bar.style.background = 'red';
+        else bar.style.background = 'linear-gradient(90deg, #ff4e00, #ffcc00)';
+    }
+
+    function endGame(success, message) {
+        gameState.isPlaying = false;
+        clearInterval(timerInterval);
+        
+        const msgOverlay = document.getElementById('message-overlay');
+        const title = document.getElementById('msg-title');
+        msgOverlay.style.display = 'block';
+        title.innerText = message;
+
+        if (success) {
+            // Check for Badge Condition (No mistakes, within time)
+            if (gameState.mistakes === 0 && gameState.timeRemaining > 0) {
+                addBadge();
+                title.innerText += " \n PERFECT SCHOLAR!";
+            }
+        }
+    }
+
+    function addBadge() {
+        const badgeArea = document.getElementById('badge-area');
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.innerText = 'GEN 1';
+        badgeArea.appendChild(badge);
+    }
+
+    function restartLevel() {
+        startLevel();
+    }
+
+    // --- VISIBILITY API (The Anti-Cheat) ---
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden && gameState.isPlaying) {
+            // User minimized or switched tabs
+            gameState.isPlaying = false;
+            clearInterval(timerInterval);
+            alert("You looked away! A true scholar stays focused. The level will restart.");
+            restartLevel();
+        }
+    });
+
+</script>
+</body>
+</html>
